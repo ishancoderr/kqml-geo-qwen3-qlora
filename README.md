@@ -22,36 +22,46 @@ The categories are DIRECT_LOOKUP, GEOMETRY_LOOKUP, SPATIAL_OPERATION, SPATIAL_AD
 
 ```
 ├── notebooks/
-│   └── qwen3_qlora_colab.ipynb     step-by-step: train and evaluate on Google Colab
+│   ├── 01_eval_base_model.ipynb    test the base Qwen3-8B on the validation examples
+│   ├── 02_train_qlora.ipynb        train the QLoRA adapter
+│   ├── 03_eval_finetuned_model.ipynb  test base + adapter, compare with 01
+│   └── qwen3_qlora_colab.ipynb     all of it in one notebook (version 1 data)
 ├── scripts/
 │   └── train_qlora.py              the same pipeline as a command-line script (GPU server, e.g. AWS)
 ├── data/
 │   ├── README.md                   format, counts, and how the data is generated
-│   ├── questions_v1.yaml           the 120 questions with their correct labels (human-readable source)
-│   ├── questions_v1_train.jsonl    training split — 375 examples from 109 questions
-│   ├── questions_v1_val.jsonl      validation split — 38 examples from 11 questions
-│   ├── questions_v1.md             every example laid out for reading
-│   └── prompts/                    the system prompts, as the model sees them
+│   ├── questions_v2.yaml           version 2: 332 questions with their correct labels (the source)
+│   ├── questions_v2_train.jsonl    training split — 975 examples from 301 questions
+│   ├── questions_v2_val.jsonl      validation split — 101 examples from 31 questions
+│   ├── questions_v2.md             every example laid out for reading
+│   ├── prompts_v2/                 the 17 system prompts of version 2, as the model sees them
+│   ├── questions_v1*, prompts_v1/  version 1 (120 questions), kept for reference
 └── requirements.txt                libraries for scripts/train_qlora.py
 ```
 
-## Quick start (Google Colab)
+## Quick start (Google Colab) — three notebooks
 
-1. Click **Open in Colab** above.
-2. *Runtime → Change runtime type → T4 GPU*.
-3. Run the steps in order. Step 3 downloads this repository, so there is nothing to upload. Set `USE_DRIVE = True` there to keep checkpoints and results on Google Drive, so that training can resume after a disconnect.
+Run them in order, each in its own Colab session (*Runtime → Change runtime type → T4 GPU*). Each downloads this repository itself, so there is nothing to upload. Keep `DATA_VERSION = "v2"` and `USE_DRIVE = True` the same in all three — they find each other's outputs on Google Drive through them.
 
-The notebook tests the base model, trains the adapter, tests the fine-tuned model on the same validation examples, and prints a before/after table per task.
+| | Notebook | Does | Writes to `MyDrive/kqml_finetune/` |
+|---|---|---|---|
+| 1 | [01 — base model](https://colab.research.google.com/github/ishancoderr/kqml-geo-qwen3-qlora/blob/main/notebooks/01_eval_base_model.ipynb) | plain Qwen3-8B answers the validation examples | `results/qwen3-8b-v2/eval_base.jsonl` |
+| 2 | [02 — train](https://colab.research.google.com/github/ishancoderr/kqml-geo-qwen3-qlora/blob/main/notebooks/02_train_qlora.ipynb) | trains the LoRA adapter; resumes from the last epoch after a disconnect | `adapters/qwen3-8b-v2/`, `results/…/training_log.json` |
+| 3 | [03 — fine-tuned model](https://colab.research.google.com/github/ishancoderr/kqml-geo-qwen3-qlora/blob/main/notebooks/03_eval_finetuned_model.ipynb) | base + adapter answers the same examples; table base vs. fine-tuned per task and category | `results/qwen3-8b-v2/eval_tuned.jsonl` |
+
+The two test notebooks save every answer as soon as it is made: after a disconnect, run the notebook again and it continues after the last saved answer. `LIMIT = 10` in their Step 4 makes a quick trial run first.
+
+The single notebook `qwen3_qlora_colab.ipynb` does all three stages in one session, on the version 1 data.
 
 ## Command line (GPU server)
 
 ```bash
 pip install -r requirements.txt     # torch must already be installed (e.g. the AWS Deep Learning AMI)
 
-python scripts/train_qlora.py prepare --train data/questions_v1_train.jsonl --val data/questions_v1_val.jsonl
-python scripts/train_qlora.py eval    --val data/questions_v1_val.jsonl --tag base
-python scripts/train_qlora.py train   --train data/questions_v1_train.jsonl --val data/questions_v1_val.jsonl --out adapters/qwen3-8b-v1
-python scripts/train_qlora.py eval    --val data/questions_v1_val.jsonl --adapter adapters/qwen3-8b-v1 --tag tuned
+python scripts/train_qlora.py prepare --train data/questions_v2_train.jsonl --val data/questions_v2_val.jsonl
+python scripts/train_qlora.py eval    --val data/questions_v2_val.jsonl --tag base
+python scripts/train_qlora.py train   --train data/questions_v2_train.jsonl --val data/questions_v2_val.jsonl --out adapters/qwen3-8b-v2
+python scripts/train_qlora.py eval    --val data/questions_v2_val.jsonl --adapter adapters/qwen3-8b-v2 --tag tuned
 ```
 
 ## Method
@@ -66,7 +76,7 @@ python scripts/train_qlora.py eval    --val data/questions_v1_val.jsonl --adapte
 | Prompt format | Qwen3 chat template, `enable_thinking=False` | identical prompt at training and inference |
 | Loss | on the answer only, the prompt is masked | the model learns the answer, not to repeat the prompt |
 
-Examples longer than 2,048 tokens would be skipped rather than truncated; in this dataset the longest is about 1,700 tokens.
+Examples longer than 2,048 tokens would be skipped rather than truncated; in version 2 the longest is 1,830 tokens (counted with the Qwen3 tokenizer and chat template), so none is skipped.
 
 ## Evaluation
 
